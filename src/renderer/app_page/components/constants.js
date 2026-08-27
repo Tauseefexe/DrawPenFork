@@ -19,7 +19,6 @@ export const rainbowScaleFactor = 0.03;
 export const minObjectDistance = 5; // Minimum length of drawn object
 export const figureMinScale = 0.2;
 export const pastCooldownMs = 300;
-export const escDoubleTapMs = 300;
 export const SNAP_ANGLE = Math.PI / 12; // 45°
 export const highlighterAlpha = 0.35;
 export const eraserAlpha = 0.5;

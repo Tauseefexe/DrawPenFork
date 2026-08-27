@@ -295,9 +295,10 @@ function updateContextMenu() {
 
   const contextMenu = Menu.buildFromTemplate([
     {
-      label: withAccelHint((drawingMode ? 'Enable Pointer Mode' : 'Enable Draw Mode'), key_show_hide_app),
+      label: withAccelHint('Enable Draw Mode', key_show_hide_app),
       accelerator: accelForTray(key_show_hide_app),
-      click: toggleDrawOrPointerMode
+      enabled: !drawingMode,
+      click: enableDrawModeUserAction
     },
     {
       label: withAccelHint((show_tool_bar ? 'Hide Toolbar' : 'Show Toolbar'), key_show_hide_toolbar),
@@ -354,7 +355,9 @@ function registerTrayActions() {
 
   if (isWin || isLinux) {
     tray.on('click', () => {
-      toggleDrawOrPointerMode()
+      // Draw mode can only be left via the Pointer button or Esc key.
+      // Tray click only enters draw mode, it never disables it.
+      enableDrawModeUserAction()
     })
   }
 }
@@ -493,7 +496,7 @@ function createExtendedToolbarWindow() {
   extendedToolbarWindow.webContents.on('did-finish-load', () => {
     if (startAsHidden) return;
 
-    enablePointerMode()
+    disableDrawMode()
   })
 
   extendedToolbarWindow.webContents.setVisualZoomLevelLimits(1, 1);
@@ -512,9 +515,8 @@ function showAboutWindow() {
       createAboutWindow();
     }
 
-    if (drawingMode) {
-      enablePointerMode()
-    }
+    // NOTE: Draw mode is deliberately NOT switched to pointer mode here.
+    // The only ways to leave draw mode are the Pointer button or the Esc key.
   });
 }
 
@@ -577,9 +579,8 @@ function showSettingsWindow() {
       createSettingsWindow();
     }
 
-    if (drawingMode) {
-      enablePointerMode()
-    }
+    // NOTE: Draw mode is deliberately NOT switched to pointer mode here.
+    // The only ways to leave draw mode are the Pointer button or the Esc key.
   });
 }
 
@@ -780,8 +781,17 @@ ipcMain.handle('close_app', () => {
   return null
 });
 
-ipcMain.handle('toggle_draw_or_pointer_window', () => {
-  toggleDrawOrPointerMode()
+ipcMain.handle('enable_draw_mode', () => {
+  enableDrawMode()
+
+  return null
+});
+
+ipcMain.handle('disable_draw_mode', () => {
+  // Deliberately NOT throttled: a shared throttle timestamp with the tray or
+  // global shortcut could swallow a quick Esc press right after entering
+  // draw mode. This handler is idempotent, so repeats are harmless.
+  disableDrawMode()
 
   return null
 });
@@ -800,7 +810,8 @@ ipcMain.handle('make_screenshot', () => {
 
 ipcMain.handle('open_notification', (_event, info) => {
   if (info.action === 'open_screenshot') {
-    enablePointerMode()
+    // NOTE: Notification actions must not switch away from draw mode.
+    // Draw mode can only be left via the Pointer button or the Esc key.
 
     const screenshotDirectory = store.get('screenshot_directory')
     const filePath = path.join(screenshotDirectory, info.data)
@@ -815,7 +826,7 @@ ipcMain.handle('open_notification', (_event, info) => {
   }
 
   if (info.action === 'open_security_preferences') {
-    enablePointerMode()
+    // NOTE: Notification actions must not switch away from draw mode.
 
     if (isMac) {
       shell.openExternal('x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture');
@@ -1140,7 +1151,9 @@ function registerGlobalShortcuts() {
   rawLog('REGISTER global shortcuts...')
 
   const keyApp = store.get('key_binding_show_hide_app')
-  safeRegisterGlobalShortcut(keyApp, toggleDrawOrPointerMode)
+  // The global shortcut only enters draw mode. It never disables draw mode:
+  // draw mode can only be left via the Pointer button or the Esc key.
+  safeRegisterGlobalShortcut(keyApp, enableDrawModeUserAction)
 }
 
 function unRegisterGlobalShortcuts() {
@@ -1159,18 +1172,6 @@ function withThrottle(callback) {
   callback();
 }
 
-function toggleDrawOrPointerMode() {
-  withThrottle(() => {
-    rawLog('Toggling draw mode...')
-
-    if (drawingMode) {
-      enablePointerMode()
-    } else {
-      enableDrawMode()
-    }
-  });
-}
-
 function enableDrawMode() {
   rawLog('Enable drawing mode...')
 
@@ -1183,8 +1184,9 @@ function enableDrawMode() {
   updateContextMenu()
 }
 
-function enablePointerMode() {
-  rawLog('Enable pointer mode...')
+// Enter pointer mode. This is ONLY allowed from the Pointer button or the Esc key.
+function disableDrawMode() {
+  rawLog('Disable drawing mode / Enable pointer mode...')
 
   resetScreenOnHide()
 
@@ -1195,6 +1197,13 @@ function enablePointerMode() {
   updateContextMenu()
 
   releaseFocusBack()
+}
+
+// Throttled variant for user-facing ENTRY toggles (tray, global shortcut).
+// Note: exiting draw mode (Esc / Pointer button IPC) is deliberately NOT
+// throttled so a quick Esc right after entering draw mode is never dropped.
+function enableDrawModeUserAction() {
+  withThrottle(() => enableDrawMode())
 }
 
 function hideApp() {
@@ -1277,7 +1286,9 @@ function resetApp() {
 
     tray.setImage(getTrayIconPath())
 
-    enablePointerMode()
+    // Restore toolbar visibility after store reset without switching modes.
+    updateExternalToolbarVisibility()
+    updateContextMenu()
 
     mainWindow.reload()
 

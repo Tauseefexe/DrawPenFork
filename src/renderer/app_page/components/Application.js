@@ -47,7 +47,6 @@ import {
   widthList,
   minObjectDistance,
   pastCooldownMs,
-  escDoubleTapMs,
   updateStoreDelay,
 } from './constants.js';
 
@@ -119,7 +118,6 @@ const Application = (settings) => {
 
   const [colorList, setColorList] = useState(() => createApplicationColorList(settings.tool_bar_color_palette));
   const [rainbowColorDeg, updateRainbowColorDeg] = useState(initialColorDeg);
-  const [mouseCoordinates, setMouseCoordinates] = useState({ x: 0, y: 0 });
   const [allFigures, setAllFigures] = useState(initialFigures);
   const [allLaserFigures, setLaserFigure] = useState([]);
   const [allEraserFigures, setEraserFigure] = useState([]);
@@ -172,7 +170,7 @@ const Application = (settings) => {
   }, []);
 
   const lastPasteAtRef = useRef(0);
-  const lastEscapeAtRef = useRef(0);
+  const mouseCoordinatesRef = useRef({ x: 0, y: 0 });
 
   const handleKeyDown = useCallback((event) => {
     const eventKey = (event.key || '').toLowerCase();
@@ -267,7 +265,7 @@ const Application = (settings) => {
             if (now - lastPasteAtRef.current < pastCooldownMs) return;
             lastPasteAtRef.current = now;
 
-            const { x, y } = mouseCoordinates;
+            const { x, y } = mouseCoordinatesRef.current;
 
             const newFigure = {
               ...clipboardFigure,
@@ -445,6 +443,9 @@ const Application = (settings) => {
       case 'escape': {
         if (eventRepeat) break;
 
+        // Esc is one of the ONLY two ways to leave draw mode
+        // (the other is the Pointer Mode button in the toolbar).
+        // Closing an open sub-panel or a selected figure takes priority.
         if (toolbarSlide !== 'main-slide') {
           setToolbarSlide('main-slide');
           break;
@@ -455,14 +456,7 @@ const Application = (settings) => {
           break;
         }
 
-        const now = Date.now();
-        if (now - lastEscapeAtRef.current < escDoubleTapMs) {
-          lastEscapeAtRef.current = 0;
-          invokePointerMode();
-        } else {
-          lastEscapeAtRef.current = now;
-        }
-
+        invokePointerMode();
         break;
       }
     }
@@ -567,7 +561,7 @@ const Application = (settings) => {
         }
         break;
     }
-  }, [allFigures, undoStackFigures, redoStackFigures, clipboardFigure, isDrawing, activeFigureInfo, activeTool, activeColorIndex, activeWidthIndex, toolbarLastActiveBrush, toolbarLastActiveFigure, lastActivePen, lastActiveArrow, toolbarSlide, textEditorContainer, mouseCoordinates, mainColorIndex, secondaryColorIndex, colorList]);
+  }, [allFigures, undoStackFigures, redoStackFigures, clipboardFigure, isDrawing, activeFigureInfo, activeTool, activeColorIndex, activeWidthIndex, toolbarLastActiveBrush, toolbarLastActiveFigure, lastActivePen, lastActiveArrow, toolbarSlide, textEditorContainer, mainColorIndex, secondaryColorIndex, colorList]);
 
   const handleKeyUp = useCallback((event) => {
     const eventKey = (event.key || '').toLowerCase();
@@ -1233,7 +1227,7 @@ const Application = (settings) => {
             points: upPoint,
           };
 
-          setRippleEffects([...rippleEffects, ripple]);
+          setRippleEffects(prevRippleEffects => [...prevRippleEffects, ripple]);
 
           currentLaser.points = [];
           setLaserFigure([...allLaserFigures]);
@@ -1332,19 +1326,26 @@ const Application = (settings) => {
     }
   };
 
-  const handleMousePosition = (event) => {
-    setMouseCoordinates(getMouseCoordinates(event));
-  }
+  // Mouse coordinates are only consumed by the CuteCursor and paste (Ctrl+V).
+  // Updating React state on every pointermove re-renders the WHOLE app tree at
+  // pointer event rate (can be 120-240Hz), so we keep ONLY a ref here (no
+  // re-render) and let CuteCursor track its own position with a rAF-batched
+  // state update.
+  const handleMousePosition = useCallback((event) => {
+    mouseCoordinatesRef.current = getMouseCoordinates(event);
+  }, []);
 
   const handleContextMenu = (event) => {
+    // Right-click no longer exits draw mode.
+    // The ONLY ways to leave draw mode are the Pointer Mode button or the Esc key.
     event.preventDefault();
-
-    if (clearDrawingsOnHide) {
-      handleReset();
-    }
-
-    invokePointerMode();
   }
+
+  const handleRippleEnd = useCallback((rippleId) => {
+    setRippleEffects((prevRippleEffects) => (
+      prevRippleEffects.filter(ripple => ripple.id !== rippleId)
+    ));
+  }, []);
 
   const handleEnablePointerMode = () => {
     if (clearDrawingsOnHide) {
@@ -1599,6 +1600,7 @@ const Application = (settings) => {
         rippleEffects &&
           <RippleEffect
             rippleEffects={rippleEffects}
+            handleRippleEnd={handleRippleEnd}
           />
       }
 
@@ -1615,7 +1617,7 @@ const Application = (settings) => {
         isCuteCursorVisible &&
           <CuteCursor
             key={`${activeTool}:${activeColorIndex}:${activeWidthIndex}`}
-            mouseCoordinates={mouseCoordinates}
+            mouseCoordinatesRef={mouseCoordinatesRef}
             activeColorIndex={activeColorIndex}
             activeWidthIndex={activeWidthIndex}
             activeTool={activeTool}

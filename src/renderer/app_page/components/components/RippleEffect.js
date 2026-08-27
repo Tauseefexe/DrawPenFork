@@ -1,7 +1,7 @@
 import React from 'react';
 import './RippleEffect.scss';
 
-const RippleEffect = ({ rippleEffects }) => {
+const RippleEffect = ({ rippleEffects, handleRippleEnd }) => {
   return (
     <div id='ripple-wrapper'>
       {
@@ -12,6 +12,7 @@ const RippleEffect = ({ rippleEffects }) => {
             <div
               className="ripple-loader"
               key={ripple.id}
+              onAnimationEnd={() => handleRippleEnd(ripple.id)}
               style={{
                 top: `${y}px`,
                 left: `${x}px`,

@@ -5,7 +5,7 @@ const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('electronAPI', {
   // Renderer -> Main
   invokeCloseApp: () => ipcRenderer.invoke('close_app'),
-  invokePointerMode: () => ipcRenderer.invoke('toggle_draw_or_pointer_window'),
+  invokePointerMode: () => ipcRenderer.invoke('disable_draw_mode'),
   invokeOpenSettings: () => ipcRenderer.invoke('open_settings'),
   invokeMakeScreenshot: () => ipcRenderer.invoke('make_screenshot'),
   invokeOpenNotification: (info) => ipcRenderer.invoke('open_notification', info),

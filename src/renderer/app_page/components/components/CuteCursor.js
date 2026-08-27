@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect, useRef, useState } from "react";
 import "./CuteCursor.scss";
 import {
   eraserTailColor,
@@ -10,7 +10,7 @@ import {
 import { getCursorColor } from "./drawer/figures.js";
 
 const CuteCursor = ({
-  mouseCoordinates,
+  mouseCoordinatesRef,
   activeColorIndex,
   activeWidthIndex,
   activeTool,
@@ -19,6 +19,41 @@ const CuteCursor = ({
   rainbowColorDeg,
   cuteCursorMode,
 }) => {
+  // The parent passes no position prop: subscribing here keeps pointer-move
+  // updates local to this small component instead of re-rendering the whole
+  // app (which contains the full-desk canvas) at 120-240Hz pointer rate.
+  // Updates are batched to at most one per animation frame.
+  // The ref only seeds the initial position when this component remounts
+  // (e.g. when the tool changes), so the cursor never blinks out.
+  const initialCoordinates = mouseCoordinatesRef?.current ?? { x: 0, y: 0 };
+  const [mouseCoordinates, setMouseCoordinates] = useState(initialCoordinates);
+  const latestCoordinatesRef = useRef(initialCoordinates);
+  const rafRef = useRef(null);
+
+  useEffect(() => {
+    const handlePointerMove = (event) => {
+      latestCoordinatesRef.current = { x: event.pageX, y: event.pageY };
+
+      if (rafRef.current) return;
+
+      rafRef.current = requestAnimationFrame(() => {
+        rafRef.current = null;
+        setMouseCoordinates(latestCoordinatesRef.current);
+      });
+    };
+
+    window.addEventListener('pointermove', handlePointerMove);
+
+    return () => {
+      window.removeEventListener('pointermove', handlePointerMove);
+
+      if (rafRef.current) {
+        cancelAnimationFrame(rafRef.current);
+        rafRef.current = null;
+      }
+    };
+  }, []);
+
   if (mouseCoordinates.x === 0 && mouseCoordinates.y === 0) {
     return null;
   }

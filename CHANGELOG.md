@@ -1,5 +1,17 @@
 # Change Log
 
+## [Unreleased]
+### Changes:
+- Draw mode can now ONLY be left via the Pointer Mode button or the `Esc` key. Right-click, tray click, the global shortcut, notifications, settings/about windows and "Reset to original" no longer automatically switch to pointer mode.
+- The global shortcut and tray now only ENTER draw mode (extended toolbar button and tray menu "Enable Draw Mode" are the entry points).
+
+### Features:
+- Add automated **portable Windows build** (GitHub Actions): builds the runnable folder (DrawPen.exe + DLLs + resources) and publishes it as a downloadable ZIP in the `portable` release; `portable/` folder documents it and ships a PowerShell downloader.
+
+### Improvements:
+- Renderer performance: pointer moves no longer re-render the whole app — the cute cursor tracks its own position with a rAF-batched local state, and canvas redraws are coalesced into a single `requestAnimationFrame` pass.
+- Fix: ripples from laser clicks are now removed after their animation (previously the list grew forever).
+
 ## [0.0.57] - 2026-08-25
 ### Features:
 - Add toolbar shortcut hints on CMD/CTRL hold

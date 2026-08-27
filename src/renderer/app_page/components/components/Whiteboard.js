@@ -211,6 +211,8 @@ const Whiteboard = ({
     const handleKeyDown = (event) => {
       if (isResizeMode && ['Enter', 'Escape'].includes(event.key)) {
         event.preventDefault();
+        // Capture phase + stopPropagation: must block the App-level keydown
+        // listener (same window target) so Esc here does NOT exit draw mode.
         event.stopPropagation();
 
         handleApplyResizeMode();
@@ -226,9 +228,9 @@ const Whiteboard = ({
       }
     };
 
-    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keydown', handleKeyDown, { capture: true });
 
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown, { capture: true });
   }, [handleApplyResizeMode, isResizeMode, isSidebarOpen]);
 
   const handleClickResize = () => {

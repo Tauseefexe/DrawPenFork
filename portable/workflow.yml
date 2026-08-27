@@ -1,0 +1,189 @@
+# ============================================================================
+# ACTIVATION INSTRUCTIONS
+# This is the portable build workflow. GitHub only runs workflows from
+# .github/workflows/, and this file can NOT be pushed by the Arena bot (it
+# lacks the 'workflows' GitHub App permission), so it is stored here.
+# To activate, either:
+#   1. Web UI:  Repo -> Add file -> Create new file ->
+#               .github/workflows/portable.yml  (paste this whole file) -> Commit
+#   2. Grant the Arena GitHub App 'Workflows: Read and write' on this repo
+#      (Settings -> Applications/GitHub Apps -> Arena -> Permissions), then the
+#      bot can push it.
+# After activation choose "Run workflow" in the Actions tab, or push to main.
+# ============================================================================
+
+name: Build Portable Windows
+
+# Builds a no-installer "portable" Windows package (DrawPen.exe + all DLLs +
+# resources/ + locales/ + ...) and publishes it as a downloadable ZIP in the
+# "portable" GitHub Release of this repo, so the PORTABLE folder on GitHub
+# always has a fresh, downloadable zip of the runnable files.
+#
+# Triggers:
+#   - Manual ("Run workflow") from the Actions tab
+#   - Any push to main that changes app sources/tooling/package files
+#   - Pull requests (build-only: ZIP is uploaded as a workflow artifact but
+#     NOT published to the portable release)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/portable.yml'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'src/**'
+      - 'tools/**'
+      - 'assets/**'
+      - 'portable/**'
+  pull_request:
+    paths:
+      - '.github/workflows/portable.yml'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'src/**'
+      - 'tools/**'
+      - 'assets/**'
+      - 'portable/**'
+
+permissions:
+  contents: write
+
+jobs:
+  portable-windows:
+    name: Portable ZIP (exe + DLLs)
+    runs-on: windows-2022
+    timeout-minutes: 60
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Package portable build (no signing)
+        env:
+          PUBLIC_POSTHOG_KEY: ${{ secrets.PUBLIC_POSTHOG_KEY }}
+        run: npm run package_no_sign
+
+      - name: Locate package output
+        id: locate
+        shell: pwsh
+        run: |
+          $dir = Get-ChildItem -Path out -Directory |
+                 Where-Object { $_.Name -like '*-win32-*' } |
+                 Select-Object -First 1
+
+          if (-not $dir) {
+            throw "No Windows package output found under out/"
+          }
+
+          $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
+
+          "dir=$($dir.FullName)" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          "version=$version"     | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+
+      - name: Verify portable files (exe, DLLs, resources)
+        shell: pwsh
+        run: |
+          $dir = "${{ steps.locate.outputs.dir }}"
+
+          foreach ($name in @('DrawPen.exe', 'resources')) {
+            if (-not (Test-Path (Join-Path $dir $name))) {
+              throw "Missing required portable file: $name (in $dir)"
+            }
+          }
+
+          $dllCount = (Get-ChildItem $dir -Filter *.dll).Count
+          Write-Host "Verified: DrawPen.exe, resources/, $dllCount DLL(s)"
+
+      - name: Add portable notes inside the bundle
+        shell: pwsh
+        run: |
+          $dir = "${{ steps.locate.outputs.dir }}"
+          $version = "${{ steps.locate.outputs.version }}"
+
+          $notes = @(
+            "DrawPen Portable v$version"
+            "=========================="
+            ""
+            "No installation required."
+            "Extract this ZIP anywhere and run DrawPen.exe to start drawing."
+            ""
+            "- App data is created on first run."
+            "- To uninstall, simply delete the extracted folder."
+            "- Build preview: https://github.com/Tauseefexe/DrawPenFork/actions/workflows/portable.yml"
+          ) -join [Environment]::NewLine
+
+          Set-Content -Path (Join-Path $dir 'PORTABLE-README.txt') `
+                      -Value $notes -Encoding UTF8
+
+      - name: Create ZIP
+        shell: pwsh
+        run: |
+          $dir = "${{ steps.locate.outputs.dir }}"
+          $zip = 'DrawPen-Portable-win32-x64.zip'
+
+          if (Test-Path $zip) { Remove-Item $zip }
+
+          # Files at the ZIP root: after extracting you get DrawPen.exe directly.
+          Compress-Archive -Path (Join-Path $dir '*') `
+                           -DestinationPath $zip `
+                           -CompressionLevel Optimal
+
+          $hash = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLower()
+          Set-Content -Path "$zip.sha256" -Value "$hash  $zip" -Encoding ASCII
+
+          Write-Host "ZIP created: $((Get-Item $zip).Length) bytes"
+          Get-FileHash $zip -Algorithm SHA256 | Format-List
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: DrawPen-Portable-win32-x64
+          path: |
+            DrawPen-Portable-win32-x64.zip
+            DrawPen-Portable-win32-x64.zip.sha256
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Create portable release (if missing)
+        if: github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          REPO="${{ github.repository }}"
+          if ! gh release view portable --repo "$REPO" >/dev/null 2>&1; then
+            gh release create portable \
+              --title "DrawPen Portable (Windows)" \
+              --notes "Latest portable build. No installer - extract and run DrawPen.exe." \
+              --repo "$REPO"
+          fi
+
+      - name: Publish portable ZIP (downloadable)
+        if: github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: pwsh
+        run: |
+          $REPO = "${{ github.repository }}"
+
+          gh release upload portable `
+            DrawPen-Portable-win32-x64.zip `
+            DrawPen-Portable-win32-x64.zip.sha256 `
+            --clobber `
+            --repo $REPO
+
+          if ($LASTEXITCODE -ne 0) {
+            throw "Failed to upload portable ZIP to release 'portable'"
+          }
+
+          Write-Host "Portable ZIP published at:"
+          Write-Host "https://github.com/${{ github.repository }}/releases/download/portable/DrawPen-Portable-win32-x64.zip"

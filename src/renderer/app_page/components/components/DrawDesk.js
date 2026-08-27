@@ -1,6 +1,6 @@
 import './DrawDesk.scss';
 
-import React, { useEffect, useRef } from 'react';
+import React, { useCallback, useEffect, useRef } from 'react';
 import { palmMinContactArea, palmMinContactLength } from '../constants.js'
 import { getMouseCoordinates } from '../utils/general.js';
 import {
@@ -76,9 +76,56 @@ const DrawDesk = ({
     offCtx.scale(dpr, dpr);
   }, []);
 
+  // Redraw the whole canvas at most once per animation frame.
+  // Pointer events can fire far faster than a frame (e.g. 240Hz mice), so
+  // batching here avoids repeated full-canvas redraws between frames.
+  const latestDrawArgsRef = useRef(null);
+  const latestDrawRef = useRef(null);
+  const drawRafRef = useRef(null);
+
+  const scheduleDraw = useCallback(() => {
+    if (drawRafRef.current) return;
+
+    drawRafRef.current = requestAnimationFrame(() => {
+      drawRafRef.current = null;
+
+      const args = latestDrawArgsRef.current;
+      if (!args) return;
+
+      latestDrawRef.current(
+        args.allFigures,
+        args.allFadeFigures,
+        args.allLaserFigures,
+        args.allEraserFigures,
+        args.activeFigureInfo,
+        args.fadeOpacity,
+        args.offscreenCanvas,
+      );
+    });
+  }, []);
+
   useEffect(() => {
-    draw(allFigures, allFadeFigures, allLaserFigures, allEraserFigures, activeFigureInfo, fadeOpacity, offscreenCanvasRef.current);
-  }, [allFigures, allFadeFigures, allLaserFigures, allEraserFigures, activeFigureInfo, fadeOpacity, colorList]);
+    latestDrawArgsRef.current = {
+      allFigures,
+      allFadeFigures,
+      allLaserFigures,
+      allEraserFigures,
+      activeFigureInfo,
+      fadeOpacity,
+      offscreenCanvas: offscreenCanvasRef.current,
+    };
+
+    scheduleDraw();
+  }, [allFigures, allFadeFigures, allLaserFigures, allEraserFigures, activeFigureInfo, fadeOpacity, colorList, scheduleDraw]);
+
+  useEffect(() => {
+    return () => {
+      if (drawRafRef.current) {
+        cancelAnimationFrame(drawRafRef.current);
+        drawRafRef.current = null;
+      }
+    };
+  }, []);
 
   const draw = (allFigures, allFadeFigures, allLaserFigures, allEraserFigures, activeFigureInfo, fadeOpacity, offscreenCanvas) => {
     const ctx = canvasRef.current.getContext('2d');
@@ -172,6 +219,10 @@ const DrawDesk = ({
       drawEraserTail(ctx, figure)
     })
   };
+
+  // Keep the scheduled frame function fresh so it never uses stale
+  // colorList / updateRainbowColorDeg closures.
+  latestDrawRef.current = draw;
 
   const isTemporaryEraser = (event) => {
     const contactLength = Math.max(event.width, event.height);

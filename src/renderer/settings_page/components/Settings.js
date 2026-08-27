@@ -346,8 +346,8 @@ const Settings = (config) => {
               <div className="settings-section">
 
                 <ShortcutRow
-                  title="Show/Hide App"
-                  description="Toggles the main application window"
+                  title="Enable Draw Mode"
+                  description="Enters draw mode. Exit with Esc or the Pointer Mode button"
                   hint="Global shortcut"
                   shortcut={showHideApp}
                   onCheck={canRegisterShortcut}

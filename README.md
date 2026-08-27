@@ -39,6 +39,24 @@ scoop bucket add extras
 scoop install extras/drawpen
 ```
 
+### Portable Windows build (no installer)
+
+A **portable ZIP** (DrawPen.exe + all required DLLs + resources) is built
+automatically by GitHub Actions and published to the always-current
+[`portable` release](https://github.com/Tauseefexe/DrawPenFork/releases/tag/portable)
+of this repo:
+
+- 📦 [Download DrawPen-Portable-win32-x64.zip](https://github.com/Tauseefexe/DrawPenFork/releases/download/portable/DrawPen-Portable-win32-x64.zip)
+- 🔐 [SHA-256 checksum](https://github.com/Tauseefexe/DrawPenFork/releases/download/portable/DrawPen-Portable-win32-x64.zip.sha256)
+
+```powershell
+# One-command download + extract (Windows PowerShell)
+irm https://raw.githubusercontent.com/Tauseefexe/DrawPenFork/main/portable/get-portable.ps1 | iex
+```
+
+Extract anywhere and run `DrawPen.exe`. No installation, no admin rights;
+delete the folder to uninstall. See [`portable/README.md`](portable/README.md).
+
 ### Known issues
 
 On some Linux setups running **Wayland** (e.g. [Fedora KDE Plasma](https://github.com/DmytroVasin/DrawPen/issues/82), [Zorin](https://github.com/DmytroVasin/DrawPen/issues/81)), DrawPen may start with a **segmentation fault**. [Explanation In Details](https://github.com/IsmaelMartinez/teams-for-linux/blob/1c28e146ca78bcb0ec4df317d7f0684984adf205/docs-site/docs/development/research/wayland-x11-ozone-platform-investigation.md)
@@ -52,7 +70,8 @@ On some Linux setups running **Wayland** (e.g. [Fedora KDE Plasma](https://githu
 
 | Command                                 | Keybindings                                                  | Comment |
 | --------------------------------------- | ------------------------------------------------------------ | - |
-| Enable Draw/Pointer Mode                | <kbd>CMD/CTRL + SHIFT + A</kbd> | Global shortcut |
+| Enable Draw Mode                        | <kbd>CMD/CTRL + SHIFT + A</kbd> | Global shortcut (only enters draw mode) |
+| Enable Pointer Mode                     | <kbd>Esc</kbd> or the Pointer Mode button | The only ways to leave draw mode |
 | Activate Pen                            | <kbd>P</kbd> or <kbd>1</kbd> | |
 | Activate/Switch Shapes (Arrow/Square/etc.)   | <kbd>A</kbd>, <kbd>R</kbd>, <kbd>O</kbd> or <kbd>2</kbd> | |
 | Activate Text                           | <kbd>T</kbd> or <kbd>3</kbd> | |

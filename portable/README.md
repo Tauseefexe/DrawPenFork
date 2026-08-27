@@ -54,7 +54,10 @@ Or use the bundled script manually:
 
 ## How it is built
 
-`.github/workflows/portable.yml`:
+The build is defined by [`workflow.yml`](workflow.yml) in this folder (it
+must be placed at `.github/workflows/portable.yml` to run — see the activation
+instructions at the top of that file — or use the copy committed by the web UI
+path described there). The workflow:
 
 1. `npm install` (dependencies)
 2. `npm run package_no_sign` → Electron Forge produces `out/<app>-win32-x64/`
